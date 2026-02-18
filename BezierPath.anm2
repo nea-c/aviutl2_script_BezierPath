@@ -7,8 +7,8 @@
 --track@anchor_amount:次数,2,99,3,1
 --check@fix:向く,1
 --value@anchors:---,{0,0,0,0,0,0,0,0}
+--check@guide_visible:ガイド表示,1
 --group:ガイド関連,false
---check@guide_visible:表示,1
 --track@line_sizeD:線幅,1,1000,5,1
 --track@handle_sizeD:ハンドルサイズ,1,1000,50,1
 --check@guide_saving_disable:出力時非表示,1
