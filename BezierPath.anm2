@@ -21,10 +21,6 @@ local function bernstein_bezier(ti, n, point)
   local binomial = 1
   for i = 1, n do
     local m = binomial * ti ^ (i - 1) * (1 - ti) ^ (n - i)
-    if ti < 0 then
-      local t1 = binomial * 0.01 ^ (i - 1) * (1 - 0.01) ^ (n - i)
-      m = t1 * ti * 300
-    end
     returnData = { x = returnData.x + point[i].x * m, y = returnData.y + point[i].y * m }
     binomial = binomial * (n - i) / i
   end
@@ -114,26 +110,24 @@ local rx = -obj.rx
 local ry = -obj.ry
 local rz = -obj.rz
 
-local be = { now = {}, ago = {} }
-
 
 if BezierPathTable == nil then
   BezierPathTable = {}
 end
-if BezierPathTable[obj.layer] == nil then
-  BezierPathTable[obj.layer] = {}
+if BezierPathTable[obj.effect_id] == nil then
+  BezierPathTable[obj.effect_id] = {}
 end
 
 if (not obj.getoption("multi_object")) then
-  BezierPathTable[obj.layer].l = linear_time_bezier_table(point, 10000)
+  BezierPathTable[obj.effect_id].l = linear_time_bezier_table(point, 10000)
 elseif (obj.index == 0) then
-  BezierPathTable[obj.layer].l = linear_time_bezier_table(point, 10000)
+  BezierPathTable[obj.effect_id].l = linear_time_bezier_table(point, 10000)
 end
 
 
 local iii = offset - (1 - (obj.index + 1) / obj.num) * space
-local t0 = linear_time_bezier(iii, BezierPathTable[obj.layer].l)
-local t1 = linear_time_bezier((iii - 0.01), BezierPathTable[obj.layer].l)
+local t0 = linear_time_bezier(iii, BezierPathTable[obj.effect_id].l)
+local t1 = linear_time_bezier((iii - 0.01), BezierPathTable[obj.effect_id].l)
 local result = bernstein_bezier(t0, order, point)
 local result_ago = bernstein_bezier(t1, order, point)
 obj.ox = result.x + point[-10].x
@@ -142,13 +136,27 @@ local deg = 0
 if fix then
   deg = math.deg(math.atan2(result.y - result_ago.y, result.x - result_ago.x))
 end
+
+if BezierPathTable[obj.effect_id].deg == nil then
+  BezierPathTable[obj.effect_id].deg = {}
+end
+if BezierPathTable[obj.effect_id].deg[obj.index] == nil then
+  BezierPathTable[obj.effect_id].deg[obj.index] = {}
+end
+
+local tmp = BezierPathTable[obj.effect_id].deg[obj.index][obj.frame-1] and BezierPathTable[obj.effect_id].deg[obj.index][obj.frame-1] or 0
+local diff = (tmp - deg) % 360
+if diff > 180 then
+  diff = diff - 360
+end
+deg = tmp - diff
+BezierPathTable[obj.effect_id].deg[obj.index][obj.frame] = deg
+
+
 obj.rz = -rz + deg + rzPlus
 
 
 if (iii < 0 or 1 < iii) then
-  local ox = result.x + point[-10].x
-  local oy = result.y + point[-10].y
-  obj.ox, obj.oy = ox, oy
   obj.alpha = 0
 else
   if (guide_visible) then
