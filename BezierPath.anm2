@@ -1,61 +1,74 @@
---information:BezierPath r2 by 猫愛
+--information:BezierPath r3 by 猫愛
 --label:配置
 
 --track@trackbar_offset:オフセット,-1000,1000,0,0.01
 --track@rzPlus:回転,-180,180,0,0.01
 --track@trackbar_space:字間倍率,-9000,9000,100,0.01
---track@anchor_amount:次数,2,99,3,1
+--track@order:次数,2,99,3,1
 --check@fix:向く,1
 --value@anchors:---,{0,0,0,0,0,0,0,0}
 --check@guide_visible:ガイド表示,1
 --group:ガイド関連,false
 --track@line_sizeD:線幅,1,1000,5,1
+--track@line_density:線密度,1,2000,100,1
 --track@handle_sizeD:ハンドルサイズ,1,1000,50,1
 --check@guide_saving_disable:出力時非表示,1
 
 
 local function f()
-  --////////////////////////////////////////////////////////////////////////////////////////////
-  local function bezier(ti, p0, p1)
-    local returnData = { x = 0, y = 0 }
-    returnData.x = (1 - ti) * p0.x + ti * p1.x
-    returnData.y = (1 - ti) * p0.y + ti * p1.y
-    return returnData
+  --/////////////////////////////////////////////////////////
+  local function binomial(n, r)
+    local c = n
+    for i = 1, r - 1 do
+      c = ( n - i ) * c / ( i + 1 )
+    end
+    return c
+  end
+  --/////////////////////////////////////////////////////////
+  local function bernstein_bezier(ti, n, i, pos, base)
+    local m = binomial(n, i) * ti ^ i * (1 - ti) ^ (n - i)
+    if ti < 0 then
+      local t1 = binomial(n, i) * 0.01 ^ i * (1 - 0.01) ^ (n - i)
+      m = t1 * ti * 300
+    end
+    return { x = base.x + pos.x * m, y = base.y + pos.y * m }
   end
   --/////////////////////////////////////////////////////////
   local function get_length(a, b)
     return math.sqrt((b[1] - a[1]) ^ 2 + (b[2] - a[2]) ^ 2)
   end
   --/////////////////////////////////////////////////////////
-  local function anchor_adjust(point, zoom)
+  local function anchor_adjust(point, order, zoom)
     local point_return = {}
-    for i = 1, #point / 2 do
+    local zm = zoom / 100
+    for i = 0, order do
+      -- 値がない場合は0にする
+        point[i*2-1] = point[i*2-1] == nil and 0 or point[i * 2 - 1]
+        point[i*2] = point[i*2] == nil and 0 or point[i * 2]
+
       point_return[i] = { x = 0, y = 0 }
-      point_return[i].x = (point[i * 2 - 1] * zoom / 100)
-      point_return[i].y = (point[i * 2] * zoom / 100)
+      point_return[i].x = ((point[i * 2 - 1] - point[1]) * zm)
+      point_return[i].y = ((point[i * 2] - point[2]) * zm)
     end
+      point_return[-10] = { x = point[1] * zm, y = point[2] * zm}
     return point_return
   end
   --/////////////////////////////////////////////////////////
   local function linear_time_bezier_table(point, density)
     local p1 = {}
     local check = {}
-    check[0] = { point[1].x, point[1].y }
+    check[0] = { 0, 0 }
     local l = {}
     l[0] = 0
-    local ji = #point - 1
+    local order = #point
     local t
     for n = 0, density do
       t = n / density
-      for i = 1, ji do
-        p1[i] = bezier(t, point[i], point[i + 1])
+      local result = { x = 0, y = 0 }
+      for i = 1, order do
+        result = bernstein_bezier(t, order, i, point[i], result)
       end
-      for i = 1, ji do
-        for j = 1, ji - i do
-          p1[j] = bezier(t, p1[j], p1[j + 1])
-        end
-      end
-      check[n + 1] = { p1[1].x, p1[1].y }
+      check[n + 1] = { result.x, result.y }
       l[n + 1] = l[n] + get_length(check[n + 1], check[n])
     end
 
@@ -93,11 +106,12 @@ local function f()
   local offset = trackbar_offset / 100
   local space = trackbar_space / 100 / 2
 
-  obj.setanchor("anchors", anchor_amount + 1, "line") --アンカー/////////////////////////////////
+  obj.setanchor("anchors", order + 1, "line") --アンカー/////////////////////////////////
 
+  order = order + 1
 
   local fix = fix == 1
-  local pos = anchor_adjust(anchors, obj.getvalue("zoom"))
+  local pos = anchor_adjust(anchors, order, obj.getvalue("zoom"))
   local guide_visible = (guide_visible == 1) and (guide_saving_disable == 0 or not obj.getinfo("saving")) or false
 
 
@@ -110,45 +124,45 @@ local function f()
   local be = { now = {}, ago = {} }
 
 
-  if bezierTextTable == nil then
-    bezierTextTable = {}
+  if BezierPathTable == nil then
+    BezierPathTable = {}
   end
-  if bezierTextTable[obj.layer] == nil then
-    bezierTextTable[obj.layer] = {}
+  if BezierPathTable[obj.layer] == nil then
+    BezierPathTable[obj.layer] = {}
   end
 
   if (not obj.getoption("multi_object")) then
-    bezierTextTable[obj.layer].l = linear_time_bezier_table(pos, 10000)
+    BezierPathTable[obj.layer].l = linear_time_bezier_table(pos, 10000)
   elseif (obj.index == 0) then
-    bezierTextTable[obj.layer].l = linear_time_bezier_table(pos, 10000)
+    BezierPathTable[obj.layer].l = linear_time_bezier_table(pos, 10000)
   end
 
   local iii = offset - (1 - (obj.index + 1) / obj.num) * space
-  local t0 = linear_time_bezier(iii, bezierTextTable[obj.layer].l)
-  local t1 = linear_time_bezier((iii - 0.01), bezierTextTable[obj.layer].l)
-  for i = 1, anchor_amount do
-    be.now[i] = bezier(t0, pos[i], pos[i + 1])
-    be.ago[i] = bezier(t1, pos[i], pos[i + 1])
+  local t0 = linear_time_bezier(iii, BezierPathTable[obj.layer].l)
+  local t1 = linear_time_bezier((iii - 0.01), BezierPathTable[obj.layer].l)
+  local result = { x = 0, y = 0 }
+  local result_ago = { x = 0, y = 0 }
+  for i = 1, order do
+    result = bernstein_bezier(t0, order, i, pos[i], result)
+    result_ago = bernstein_bezier(t1, order, i, pos[i], result_ago)
   end
-  for i = 1, anchor_amount do
-    for j = 1, anchor_amount - i do
-      be.now[j] = bezier(t0, be.now[j], be.now[j + 1])
-      be.ago[j] = bezier(t1, be.ago[j], be.ago[j + 1])
-    end
-  end
-  obj.ox = be.now[1].x
-  obj.oy = be.now[1].y
+  obj.ox = result.x + pos[-10].x
+  obj.oy = result.y + pos[-10].y
   local deg = 0
   if fix then
-    deg = math.deg(math.atan2(be.now[1].y - be.ago[1].y, be.now[1].x - be.ago[1].x))
+    deg = math.deg(math.atan2(result.y - result_ago.y, result.x - result_ago.x))
   end
   obj.rz = -rz + deg + rzPlus
 
 
   if (iii < 0 or 1 < iii) then
-    obj.draw(0, 0, 0, 0)
+    local ox = result.x + pos[-10].x
+    local oy = result.y + pos[-10].y
+    obj.ox, obj.oy = ox, oy
+    obj.alpha = 0
   else
     if (guide_visible) then
+      obj.effect()
       obj.draw()
     end
   end
@@ -157,47 +171,36 @@ local function f()
   --debug_print()
   --ガイドの描画//////////////////////////////////////////////
   if (guide_visible and (obj.index == obj.num - 1)) then
-    local line_and_handle_color = 0x2ca9e1
-    local start_color = 0x3de02d
-    local end_color = math.abs(start_color - 0xffffff)
-    local line_size = line_sizeD or 3
-    local line_density = 200
-    local handle_line_view = true
+    local line_size = line_sizeD + 2 or 3
     local handle_size = handle_sizeD or 15
     --曲線/////////////////////////////////////////////////////////////////////
-    obj.load("figure", "四角形", line_and_handle_color, line_size)
+    obj.load("figure", "円", 0x2ca9e1, line_size)
     local l = linear_time_bezier_table(pos, line_density * 100)
     for iii = 0, line_density do
       local t = linear_time_bezier(iii / line_density, l)
-      for i = 1, anchor_amount do
-        be[i] = bezier(t, pos[i], pos[i + 1])
+      local result = pos[-10]
+      for i = 1, order do
+        result = bernstein_bezier(t, order, i, pos[i], result)
       end
-      for i = 1, anchor_amount do
-        for j = 1, anchor_amount - i do
-          be[j] = bezier(t, be[j], be[j + 1])
-        end
-      end
-      obj.draw(be[1].x, be[1].y, 0, zoom, alpha, rx, ry, rz)
+      obj.draw(result.x, result.y, 0, zoom, alpha, rx, ry, rz)
     end
     --開始/終了座標の点/////////////////////////////////////////////////////////////////////
-    obj.load("figure", "四角形", start_color, handle_size)
-    obj.draw(pos[1].x, pos[1].y, 0, zoom, alpha, rx, ry, rz)
-    obj.load("figure", "四角形", end_color, handle_size)
-    obj.draw(pos[anchor_amount + 1].x, pos[anchor_amount + 1].y, 0, zoom, alpha, rx, ry, rz)
+    obj.load("figure", "四角形", 0x3de02d, handle_size)
+    obj.draw(pos[-10].x, pos[-10].y, 0, zoom, alpha, rx, ry, rz)
+    obj.load("figure", "四角形", 0xc21fd2, handle_size)
+    obj.draw(pos[#pos].x + pos[-10].x, pos[#pos].y + pos[-10].y, 0, zoom, alpha, rx, ry, rz)
     --ハンドルの点/////////////////////////////////////////////////////////////////////
-    obj.load("figure", "円", line_and_handle_color, handle_size)
-    for i = 2, anchor_amount do
-      obj.draw(pos[i].x, pos[i].y, 0, zoom, alpha, rx, ry, rz)
+    obj.load("figure", "円", 0x2ca9e1, handle_size)
+    for i = 2, order - 1 do
+      obj.draw(pos[i].x + pos[-10].x, pos[i].y + pos[-10].y, 0, zoom, alpha, rx, ry, rz)
     end
     --数字/////////////////////////////////////////////////////////////////////
-    for i = 1, anchor_amount + 1 do
+    for i = 1, order do
       local handle_txt_size = handle_size * 0.7
       local handle_txt_offset = handle_txt_size * 0.5
-      handle_txt_size = (handle_txt_size < 5) and 5 or handle_txt_size
-      handle_txt_offset = (handle_txt_offset < 5) and 5 or handle_txt_offset
       obj.setfont("メイリオ", handle_txt_size, 3)
       obj.load("text", i)
-      obj.draw(pos[i].x + handle_txt_offset, pos[i].y + handle_txt_offset, 0, zoom, alpha, rx, ry, rz)
+      obj.draw(pos[i].x + handle_txt_offset + pos[-10].x, pos[i].y + handle_txt_offset + pos[-10].y, 0, zoom, alpha, rx, ry, rz)
     end
     --///////////////////////////////////////////////////////////////////////////////
   end
