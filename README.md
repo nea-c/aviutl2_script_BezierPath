@@ -3,6 +3,7 @@
 ベジェ曲線としてパスを描いて、それに沿って移動できるやつです
 
 ![sample](sample.webp)
+※サンプル映像には[ObjectMotionBlur_LK](https://github.com/korarei/AviUtl2_ObjectMotionBlur_LK_Script)を使用しています
 
 ## 最新 / Latest
 
